@@ -8,10 +8,10 @@ random_seed = 42
 np.random.seed(random_seed)
 random.seed(random_seed)
 
-n_users = 500
-n_merchants = 100
-n_transactions = 2000
-n_fraud_merchants = 5
+n_users = 4000
+n_merchants = 2500
+n_transactions = 22000
+# n_fraud_merchants = 5
 
 states = ['KA', 'UP', 'MH', 'DL', 'TN', 'RJ', 'GJ', 'BH', 'AP']
 city = ['Bangalore', 'Noida', 'Mumbai', 'Delhi', 'Chennai', 'Jaipur', 'Surat', 'Patna', 'Vizag']
@@ -22,12 +22,16 @@ device_os = ["Android", "IOS"]
 def make_dirs():
     os.makedirs(os.path.join("data//raw"), exist_ok=True)
 
+
 def generate_users():
     user_ids = [f"user_{i}" for i in range(n_users)]
+    age_bucket = np.random.choice(age_buckets, size=n_users)
+    age_list = [np.random.randint(int(age_range[:2]),int(age_range[3:])) for age_range in age_bucket]
 
     users = pd.DataFrame({
         "user_id": user_ids,
-        "age_bucket": np.random.choice(age_buckets, size=n_users),
+        "age_bucket": age_bucket,
+        "age" : age_list,
         "state": np.random.choice(states,size=n_users),
         "user_risk_score": np.random.uniform(0.0,0.3,size=n_users)
 
@@ -58,10 +62,23 @@ def generate_merchants():
 
     return merchants
 
-def pick_fraud_merchants(merchants: pd.DataFrame):
-    fraud_merchants = merchants.sample(n_fraud_merchants, random_state=random_seed)['merchant_id'].tolist()
+# def pick_fraud_merchants(merchants: pd.DataFrame):
+'''
+    Removing this function because this function was marking merchants as fraud and creating transaction according to it.
+    But in reality this never exists, because no merchants are born fraud, their behavior decides whether they are fraud or not.
+    So, now creating new generator which checks merchant's behavior and then label them as fraud
+'''
+#     fraud_merchants = merchants.sample(n_fraud_merchants, random_state=random_seed)['merchant_id'].tolist()
+#     return fraud_merchants
 
-    return fraud_merchants
+
+def generate_mule_users(users:pd.DataFrame):
+    mule_user_size = (np.random.randint(5,10)*n_users)//100
+    mule_users = users.sample(mule_user_size, random_state=random_seed)['user_id'].to_list()
+
+    return mule_users
+
+
 
 
 def timestamp(n_days:int = 30, night_bias: bool = False):
@@ -86,7 +103,8 @@ def timestamp(n_days:int = 30, night_bias: bool = False):
     return base_date.replace(hour=hour, minute=minute, second=second)
 
 
-def generate_transactions(users: pd.DataFrame, merchants:pd.DataFrame,fraud_merchants: list):
+# def generate_transactions(users: pd.DataFrame, merchants:pd.DataFrame,fraud_merchants: list):
+def generate_transactions(users: pd.DataFrame, merchants:pd.DataFrame,mule_users: list):
 
     """
     Generate normal + fraudulent transactions.
@@ -102,7 +120,7 @@ def generate_transactions(users: pd.DataFrame, merchants:pd.DataFrame,fraud_merc
 
     transactions = []
 
-    mule_users = random.sample(user_ids,k=40)
+    # mule_users = random.sample(user_ids,k=40)
 
     normal_count = int(n_transactions*0.8)
 
@@ -118,7 +136,7 @@ def generate_transactions(users: pd.DataFrame, merchants:pd.DataFrame,fraud_merc
 
         ts = timestamp(n_days=30, night_bias=False)
         device = f"device_{np.random.randint(0, n_users // 2)}"
-        is_fraud = 0
+        # is_fraud = 0
 
         transactions.append({
             "trans_id": f"t_{i}",
@@ -126,35 +144,35 @@ def generate_transactions(users: pd.DataFrame, merchants:pd.DataFrame,fraud_merc
             "merchant_id": merchant,
             "device_id": device,
             "amount": round(float(amount), 2),
-            "timestamp": ts.isoformat(),
-            "is_fraud": is_fraud,
+            "timestamp": ts.isoformat()
+            # "is_fraud": is_fraud,
         })
 
     # ---- Fraud ring transactions ----
-    fraud_count = n_transactions - normal_count
+    # fraud_count = n_transactions - normal_count
 
-    for j in range(fraud_count):
-        idx = normal_count + j
+    # for j in range(fraud_count):
+    #     idx = normal_count + j
 
-        user = random.choice(mule_users)
-        merchant = random.choice(fraud_merchants)
+    #     user = random.choice(mule_users)
+    #     merchant = random.choice(fraud_merchants)
 
-        amount = np.random.lognormal(mean=np.log(300), sigma=0.2)
-        amount = max(50.0, min(amount, 1500.0))
+    #     amount = np.random.lognormal(mean=np.log(300), sigma=0.2)
+    #     amount = max(50.0, min(amount, 1500.0))
 
-        ts = timestamp(n_days=30, night_bias=True)
-        device = f"device_fraud_{np.random.randint(0, 20)}"
-        is_fraud = 1
+    #     ts = timestamp(n_days=30, night_bias=True)
+    #     device = f"device_fraud_{np.random.randint(0, 20)}"
+    #     is_fraud = 1
 
-        transactions.append({
-            "trans_id": f"t_{idx}",
-            "user_id": user,
-            "merchant_id": merchant,
-            "device_id": device,
-            "amount": round(float(amount), 2),
-            "timestamp": ts.isoformat(),
-            "is_fraud": is_fraud,
-        })
+    #     transactions.append({
+    #         "trans_id": f"t_{idx}",
+    #         "user_id": user,
+    #         "merchant_id": merchant,
+    #         "device_id": device,
+    #         "amount": round(float(amount), 2),
+    #         "timestamp": ts.isoformat(),
+    #         "is_fraud": is_fraud,
+    #     })
 
     txns_df = pd.DataFrame(transactions)
     return txns_df
@@ -169,11 +187,11 @@ def main():
     merchants = generate_merchants()
 
     #picking fraud merchants
-    fraud_merchants = pick_fraud_merchants(merchants)
-    merchants["is_fraud_merchant"] = merchants["merchant_id"].isin(fraud_merchants).astype("int32")
+    # fraud_merchants = pick_fraud_merchants(merchants)
+    merchants["is_fraud_merchant"] = merchants["merchant_id"].isin([]).astype("int32")
 
     # Generating transactions
-    trans = generate_transactions(users=users,merchants=merchants,fraud_merchants=fraud_merchants)
+    trans = generate_transactions(users=users,merchants=merchants,fraud_merchants=[])
 
     # Creating CSVs
     users.to_csv('data/raw/users.csv', index = False)

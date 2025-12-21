@@ -1,0 +1,24 @@
+Entities exist first
+↓
+Latent actors exist (hidden, not labeled)
+↓
+Interactions happen (transactions)
+↓
+Graph structure emerges
+↓
+Fraud behavior becomes visible ONLY in structure
+↓
+Labels assigned AFTER observing structure
+
+
+point to remember
+Fraud is not a property of merchants.
+It is a property of interaction patterns.
+
+
+Rules:
+No entity is born fraud
+No label influences generation
+Fraud emerges only from interaction patterns
+Labels are assigned with hindsight
+ML never sees generator rules
