@@ -81,7 +81,8 @@ def generate_mule_users(users:pd.DataFrame):
 
 
 
-def timestamp(n_days:int = 30, night_bias: bool = False):
+# def timestamp(n_days:int = 30, night_bias: bool = False):
+def timestamp(n_days:int = 90):
     '''
     Generate random timestamps in last n_days.
     # If night_bias=True -> more likely to be at night (e.g. 11pm-4am).
@@ -91,11 +92,11 @@ def timestamp(n_days:int = 30, night_bias: bool = False):
     now = datetime.now()
     days_back = np.random.randint(0,n_days)
     base_date = now - timedelta(days=(days_back))
-
-    if night_bias:
-        hour = np.random.choice([22,23,0,1,2,3,4])
-    else:
-        hour = np.random.randint(9,22)
+    hour = np.random.choice([0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23])
+    # if hour in [22,23,0,1,2,3,4]:
+    #     night_bias = True
+    # else:
+    #     night_bias = False
 
     minute = np.random.randint(0,60)
     second = np.random.randint(0,60)
@@ -118,23 +119,33 @@ def generate_transactions(users: pd.DataFrame, merchants:pd.DataFrame,mule_users
     user_ids = users['user_id'].tolist()
     merchant_ids = merchants['merchant_id'].tolist()
 
+
+    pref_merch_size = (np.random.randint(10,20)*n_merchants)//100
+    preferred_merchants = merchants.sample(pref_merch_size,random_state=random_seed)['merchant_id'].tolist()
     transactions = []
 
     # mule_users = random.sample(user_ids,k=40)
 
-    normal_count = int(n_transactions*0.8)
+    # normal_count = int(n_transactions*0.8)
 
-    for i in range(normal_count):
-        user = random.choice(user_ids)
-        merchant = random.choice(merchant_ids)
+    for i in range(n_transactions):
+        user_group = random.choice(['nomral','mule'],p=[0.4,0.6])
+
+        if user_group == 'normal':
+            user = random.choice(user_ids)
+            merchant = random.choice(merchant_ids)
+        else:
+            user = random.choice(mule_users)
+            merchant = random.choice(merchant_ids+(preferred_merchants*30))
+        
 
         merch_row = merchants.loc[merchants["merchant_id"] == merchant].iloc[0]
         base_mu = np.log(merch_row["avg_trans_amount"] + 1)
 
         amount = np.random.lognormal(mean=base_mu, sigma=0.4)
-        amount = max(10.0, min(amount, 20000.0))  # clamp
+        amount = max(10.0, min(amount, 6000.0))  # clamp
 
-        ts = timestamp(n_days=30, night_bias=False)
+        ts = timestamp()
         device = f"device_{np.random.randint(0, n_users // 2)}"
         # is_fraud = 0
 
@@ -176,6 +187,11 @@ def generate_transactions(users: pd.DataFrame, merchants:pd.DataFrame,mule_users
 
     txns_df = pd.DataFrame(transactions)
     return txns_df
+
+
+def fradu_behavior():
+    pass
+
 
 def main():
     make_dirs()
