@@ -104,8 +104,84 @@ def timestamp(n_days:int = 90):
     return base_date.replace(hour=hour, minute=minute, second=second)
 
 
+
+# def generate_ring(merchants,mule_users:list):
+#     ring = {}
+#     pref_merch_size = (np.random.randint(5,10)*n_merchants)//100
+#     fix_preferred_merchants = merchants.sample(pref_merch_size,random_state=random_seed)['merchant_id'].tolist()
+#     preferred_merchants = fix_preferred_merchants.copy()
+#     sample_mule_users = np.random.choice(mule_users, size=5)
+#     rest_mule_users = list(set(mule_users) - set(sample_mule_users))
+#     while len(rest_mule_users) > 0:
+#         sample_merchants = np.random.choice(preferred_merchants, size = np.random.randint(4,6))
+#         preferred_merchants = list(set(preferred_merchants) - set(sample_merchants))
+
+#         if len(preferred_merchants) > 0:
+#             for i in range(len(sample_mule_users)):
+#                 ring[sample_mule_users[i]] = sample_merchants
+#         else:
+#             sample_merchants = np.random.choice(fix_preferred_merchants, size = np.random.randint(4,6))
+#             preferred_merchants = list(set(fix_preferred_merchants) - set(sample_merchants))
+#             for i in range(len(sample_mule_users)):
+#                 ring[sample_mule_users[i]] = sample_merchants
+            
+#         sample_mule_users = np.random.choice(rest_mule_users, size=np.random.randint(5,7))
+#         rest_mule_users = list(set(rest_mule_users) - set(sample_mule_users))
+
+
+#     for i in range(len(sample_mule_users)):
+#             ring[sample_mule_users[i]] = sample_merchants
+
+
+#     print(ring)
+#     return ring
+
+
+
+def generate_fraud_rings(users, merchants, num_rings=30):
+    """
+    Creates isolated fraud rings.
+    Each ring has:
+      - 6 merchants
+      - 5 mule users
+    """
+    all_users = users["user_id"].tolist()
+    all_merchants = merchants["merchant_id"].tolist()
+
+    random.shuffle(all_users)
+    random.shuffle(all_merchants)
+
+    rings = []
+    user_to_ring = {}
+
+    user_idx = 0
+    merch_idx = 0
+
+    for ring_id in range(num_rings):
+        ring_users = set(all_users[user_idx:user_idx + 5])
+        ring_merchants = set(all_merchants[merch_idx:merch_idx + 6])
+
+        user_idx += 5
+        merch_idx += 6
+
+        ring = {
+            "ring_id": ring_id,
+            "users": ring_users,
+            "merchants": ring_merchants
+        }
+
+        rings.append(ring)
+
+        for u in ring_users:
+            user_to_ring[u] = ring
+
+    return rings, user_to_ring
+
+
+
 # def generate_transactions(users: pd.DataFrame, merchants:pd.DataFrame,fraud_merchants: list):
-def generate_transactions(users: pd.DataFrame, merchants:pd.DataFrame,mule_users: list):
+def generate_transactions(users, merchants, user_to_ring, fraud_merchants, normal_merchants):
+
 
     """
     Generate normal + fraudulent transactions.
@@ -119,31 +195,34 @@ def generate_transactions(users: pd.DataFrame, merchants:pd.DataFrame,mule_users
     user_ids = users['user_id'].tolist()
     merchant_ids = merchants['merchant_id'].tolist()
 
-
-    pref_merch_size = (np.random.randint(10,20)*n_merchants)//100
-    preferred_merchants = merchants.sample(pref_merch_size,random_state=random_seed)['merchant_id'].tolist()
     transactions = []
+
 
     # mule_users = random.sample(user_ids,k=40)
 
     # normal_count = int(n_transactions*0.8)
 
     for i in range(n_transactions):
-        user_group = random.choice(['nomral','mule'],p=[0.4,0.6])
+        user = random.choice(user_ids)
 
-        if user_group == 'normal':
-            user = random.choice(user_ids)
-            merchant = random.choice(merchant_ids)
+        if user in user_to_ring:
+    # Mule user → ONLY ring merchants
+            ring = user_to_ring[user]
+            merchant = random.choice(list(ring["merchants"]))
         else:
-            user = random.choice(mule_users)
-            merchant = random.choice(merchant_ids+(preferred_merchants*30))
+            # Normal user → mostly normal merchants
+            if random.random() < 0.97:   # 97% of the time
+                merchant = random.choice(normal_merchants)
+            else:                        # 3% rare exposure
+                merchant = random.choice(fraud_merchants)
+
         
 
         merch_row = merchants.loc[merchants["merchant_id"] == merchant].iloc[0]
         base_mu = np.log(merch_row["avg_trans_amount"] + 1)
 
         amount = np.random.lognormal(mean=base_mu, sigma=0.4)
-        amount = max(10.0, min(amount, 6000.0))  # clamp
+        amount = max(10.0, min(amount, 7000.0))  # clamp
 
         ts = timestamp()
         device = f"device_{np.random.randint(0, n_users // 2)}"
@@ -189,8 +268,46 @@ def generate_transactions(users: pd.DataFrame, merchants:pd.DataFrame,mule_users
     return txns_df
 
 
-def fradu_behavior():
-    pass
+def generate_fraud_behavior(x,y, trans_df:pd.DataFrame):
+    # this function will decide if the merchant is fraud or not,
+    # if the merchant shares >= x users with >= y merchants then the merchant is fraud
+    
+    is_fraud = {}
+    connection_count = {}
+    merch_user_connection = {}
+    for i,row in trans_df.iterrows():
+        if row['merchant_id'] in merch_user_connection:
+            merch_user_connection[row['merchant_id']].add(row['user_id'])
+        else:
+            merch_user_connection[row['merchant_id']] = {row['user_id']}
+            connection_count[row['merchant_id']] = 0
+    
+    merch_list = list(merch_user_connection.keys())
+    merch_count = len(merch_list)
+    for i in range(merch_count):
+        count = 0
+        for j in range(i+1, merch_count):
+            share_user = len(merch_user_connection[merch_list[i]] & merch_user_connection[merch_list[j]])
+
+            if share_user >= x:
+                connection_count[merch_list[i]] += 1
+                connection_count[merch_list[j]] += 1
+                count += 1
+            if count >= y:
+                is_fraud[merch_list[i]] = 1
+                break
+        
+    for merch in connection_count.keys():
+        if connection_count[merch] >= y:
+            is_fraud[merch] = 1
+        else:
+            is_fraud[merch] = 0
+
+
+    fraud_merch = pd.DataFrame(list(is_fraud.items()),columns=['merchant_id','is_fraud']).sort_values('merchant_id')  
+
+    return fraud_merch
+    
 
 
 def main():
@@ -202,12 +319,44 @@ def main():
     # Generating Merchats
     merchants = generate_merchants()
 
-    #picking fraud merchants
-    # fraud_merchants = pick_fraud_merchants(merchants)
-    merchants["is_fraud_merchant"] = merchants["merchant_id"].isin([]).astype("int32")
+    # Generating mule users
+    rings, user_to_ring = generate_fraud_rings(
+    users=users,
+    merchants=merchants,
+    num_rings=30
+    )
+
+    # After creating rings
+    fraud_merchants = set()
+    for ring in rings:
+        fraud_merchants.update(ring["merchants"])
+
+    all_merchants = set(merchants["merchant_id"].tolist())
+    normal_merchants = list(all_merchants - fraud_merchants)
+    fraud_merchants = list(fraud_merchants)
+
 
     # Generating transactions
-    trans = generate_transactions(users=users,merchants=merchants,fraud_merchants=[])
+
+    trans = generate_transactions(
+    users=users,
+    merchants=merchants,
+    user_to_ring=user_to_ring,
+    fraud_merchants=fraud_merchants,
+    normal_merchants=normal_merchants
+    )
+
+    #picking fraud merchants
+    # fraud_merchants = pick_fraud_merchants(merchants)
+    # merchants["is_fraud_merchant"] = merchants["merchant_id"].isin([]).astype("int32")
+
+
+
+    fraud_merch = generate_fraud_behavior(2,3,trans)
+
+
+    merchants = merchants.merge(fraud_merch,how='left',on='merchant_id')
+    merchants['is_fraud'] = merchants['is_fraud'].astype('Int64')
 
     # Creating CSVs
     users.to_csv('data/raw/users.csv', index = False)
