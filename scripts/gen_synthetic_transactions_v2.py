@@ -8,9 +8,9 @@ random_seed = 42
 np.random.seed(random_seed)
 random.seed(random_seed)
 
-n_users = 4000
-n_merchants = 2500
-n_transactions = 22000
+n_users = 6000
+n_merchants = 4000
+n_transactions = 35000
 # n_fraud_merchants = 5
 
 states = ['KA', 'UP', 'MH', 'DL', 'TN', 'RJ', 'GJ', 'BH', 'AP']
@@ -158,8 +158,8 @@ def generate_fraud_rings(users, merchants, num_rings=30):
     merch_idx = 0
 
     for ring_id in range(num_rings):
-        ring_users = set(all_users[user_idx:user_idx + 5])
-        ring_merchants = set(all_merchants[merch_idx:merch_idx + 6])
+        ring_users = set(all_users[user_idx:user_idx + 10])
+        ring_merchants = set(all_merchants[merch_idx:merch_idx + 8])
 
         user_idx += 5
         merch_idx += 6
@@ -222,7 +222,7 @@ def generate_transactions(users, merchants, user_to_ring, fraud_merchants, norma
         base_mu = np.log(merch_row["avg_trans_amount"] + 1)
 
         amount = np.random.lognormal(mean=base_mu, sigma=0.4)
-        amount = max(10.0, min(amount, 7000.0))  # clamp
+        amount = max(10.0, min(amount, 20000.0))  # clamp
 
         ts = timestamp()
         device = f"device_{np.random.randint(0, n_users // 2)}"
